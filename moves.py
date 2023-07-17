@@ -78,11 +78,13 @@ def shooting_move(ens):
                 msg+= f" start conditions {ens.start_conditions}"
                 logger.debug(msg)
                 logger.debug("Backwards part hit the wrong interface.")
-                return "BWI", Path(temp_path, temp_path_op)
+                return "BWI", Path(temp_path[::-1] + [shootpoint], 
+                                   temp_path_op[::-1] + [shootpoint_op])
         if run_len >= shoot_maxlen and not crossed_bw:
             msg = f"Backwards part too long ({run_len} >= {shoot_maxlen})"
             logger.debug(msg)
-            return "BTL", Path(temp_path, temp_path_op)
+            return "BTL", Path(temp_path[::-1] + [shootpoint], 
+                               temp_path_op[::-1] + [shootpoint_op])
 
     temp_path = temp_path[::-1] + [shootpoint]  # reverse backwards part
     temp_path_op = temp_path_op[::-1] + [shootpoint_op]

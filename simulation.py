@@ -45,7 +45,7 @@ class Simulation:
         self.settings = settings
         self.intfs = settings["interfaces"]
         self.cycle = settings.get("cycle", 0)
-        self.max_cycles = settings.get("max_cycles", 100)
+        self.max_cycles = settings.get("max_cycles", 1000000)
         self.simtype = settings["simtype"]
         self.method = settings["method"]
         self.permeability = settings.get("permeability", False)
@@ -234,7 +234,7 @@ class Simulation:
 
     def run(self):
         p_shoot = 0.9
-        while self.cycle < 1000:
+        while self.cycle < self.max_cycles:
             logger.info("-" * 80)
             logger.info("Cycle {}".format(self.cycle))
             logger.info("-" * 80)
