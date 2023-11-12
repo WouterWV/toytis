@@ -34,3 +34,9 @@ class Path:
         self.ens_id = ens_id
         self.path_id = Path.path_counter
         Path.path_counter += 1
+
+    def copy_path(self):
+        """Returns a copy of the path. Changes made to this new path will not be
+        reflected in the original path.
+        """
+        return Path(self.phasepoints.copy(), self.orders.copy(), self.ens_id)
