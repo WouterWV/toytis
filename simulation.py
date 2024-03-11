@@ -57,8 +57,8 @@ class Simulation:
         self.p_shoot = settings.get("p_shoot", 0.9)
         self.include_stateB = settings.get("include_stateB", False)
         self.prime_both_starts = settings.get("prime_both_starts", False)
-        self.snake_Lmax = settings.get("snake_Lmax", 5)
-        self.save_pe2 = settings.get("save_pe2", False)
+        #self.snake_Lmax = settings.get("snake_Lmax", 5)
+        #self.save_pe2 = settings.get("save_pe2", False)
         
         logger.info("Initializing the {} simulation.".format(self.simtype))
         # Making the ensembles
@@ -83,24 +83,6 @@ class Simulation:
             self.load_ensembles_from_restart()
             logger.info("Done loading restart pickles for ensembles")
 
-    def do_snake_move(self, tail_id=None):
-        """Spawns a snake in a random ensemble.
-        
-        """
-        self.cycle += 1
-        logger.info("Cycle {}: Performing a snake move.".format(self.cycle))
-        snake_skeleton, snake_paths, visits =\
-            snake_move(self.ensembles, Lmax=self.snake_Lmax,
-                       simcycle=self.cycle,
-                       tail_id=tail_id)
-        # Calculate the amount of ensemble visits and how many unique ensembles 
-        # were visited
-        tot_visits = np.sum(visits)
-        unique_visits = np.sum(visits > 0)
-        logger.info("Snake made {} visits to {} unique ensembles.".format(
-            tot_visits, unique_visits))
-        # Updating the data happens within snake_move itself
-
     def do_shooting_moves(self):
         """Perform shooting moves in all the ensembles.
 
@@ -112,59 +94,6 @@ class Simulation:
                 ens.name, status))
             ens.update_data(status, trial, "sh", self.cycle)
 
-    def do_multi_level_shooting_moves(self):
-        """Perform shooting moves in all the ensembles, where the level at 
-        which we shoot is chosen between 0 or 1.
-        
-        """
-        self.cycle += 1
-        for ens in self.ensembles:
-            level = np.random.choice([0,1])
-            status, trial = shooting_move(ens, level=level)
-            logger.info("Shooting move in {} at level {} resulted in {}".format(
-                ens.name, level, status))
-            ens.update_data(status, trial, "sh", self.cycle, update_paths=False)
-            # update the ensemble paths list. (If the trial path is accepted!!)
-            #
-            # If we shot from level 0, then the trial path is the new level 1 
-            # path. The original level 1 path is now the level 0 path. The 
-            # original level 0 path becomes the level 3 path. For the other
-            # paths, level N becomes level N+1. 
-            # We can accomplish this quickly by just inserting the trial path
-            # # at position 1, and then flipping level 0 with level 2. 
-            # if level == 0 and status == "ACC":
-            #     ens.paths.insert(1, trial)
-            #     ens.paths[0], ens.paths[2] = ens.paths[2], ens.paths[0]
-            #     if len(ens.paths) > ens.max_paths:
-            #         ens.paths.pop()
-            # # If we shot from level 1, then the trial path is the new level 0
-            # # path. All other paths are just shifted one level up.
-            # # We can accomplish this quickly by just inserting the trial path
-            # # at position 0. 
-            # if level == 1 and status == "ACC":
-            #     ens.paths.insert(0, trial)
-            #     if len(ens.paths) > ens.max_paths:
-            #         ens.paths.pop()
-            # The above didn't work, so we'll make it easier: 
-            # If we shot from level 0, then trial = new level 1, and old level 1
-            # is now level 0. We first make two empty spots in the paths list, 
-            # and fill them up. 
-            if level == 0 and status == "ACC":
-                ens.paths.insert(0, trial)
-                ens.paths.insert(0, ens.paths[2])  # this was the old level 1
-            if level == 1 and status == "ACC":
-                ens.paths.insert(0, ens.paths[0])  # this was old level 0
-                ens.paths.insert(0, trial)
-            if status != 'ACC':
-                ens.paths.insert(0, ens.paths[1])  # This was old level 1
-                ens.paths.insert(0, ens.paths[1])  # This was old level 0
-            if len(ens.paths) > ens.max_paths:
-                while len(ens.paths) > ens.max_paths:
-                    ens.paths.pop()
-            
-            # We need to update the pe2 file
-            if self.save_pe2:
-                ens.write_to_pe2(gen="sh")
 
     def do_swap_moves(self):
         """ Perform swap moves in all the ensembles, where we swap the
@@ -227,77 +156,6 @@ class Simulation:
             self.ensembles[i].update_data(status, trial1, "s+", self.cycle)
             self.ensembles[i+1].update_data(status, trial2, "s-", self.cycle)
     
-    def do_forced_extension_move(self, idx=None):
-        self.cycle += 1
-        # choose a random ensemble to start from 
-        if idx is None:
-            idx = np.random.choice(self.ensembles).id
-        logger.info("Forced extension move in {} ({})".format(
-            self.ensembles[idx].name, idx))
-        status, trial, newidx = forced_extension(self.ensembles, idx)
-        logger.info("Forced ext from {} ({}) to {} ({}) resulted in {}".format(
-            self.ensembles[idx].name, idx,
-            self.ensembles[newidx].name, newidx,
-            status))
-        # Update the data. 
-        # Sadly, we will waste some computational time to enforce detailed
-        # balance. The ensemble which we extend from will remove its last path
-        # and also the path_data for that path. The ensemble which we extend to
-        # gains the newly generated path, whose path_data is added to the 
-        # pathensemble.txt file. 
-        self.ensembles[newidx].update_data(status, trial, 'fn', self.cycle)
-        #self.ensembles[newidx].paths.insert(0, trial)
-        self.ensembles[idx].jump_back(n=1)
-        # That's it..
-        
-        # ## OLD UPDATE CODE ##
-        # # update the data
-        # # new ensemble gets the trial to pathensemble.txt, while the old 
-        # # ensemble gets its second_last path to pathensemble.txt. We update the
-        # # ensemble paths list for the new ensemble using update_data (as this 
-        # # also manages the max length of the paths list)
-        # self.ensembles[newidx].update_data(status, trial, 'fn', self.cycle)
-        # self.ensembles[idx].update_data(status, self.ensembles[idx].paths[1],
-        #                                 'fo', self.cycle, update_paths=False)
-        # # manage the ensemble path list of the old ensemble
-        # # for the old ensemble, we pop the first path, and as a safety measure
-        # # we insert the lowest level path again (such that we never run out of
-        # # paths) TODO: this may lead to biases in extreme cases?
-        # self.ensembles[idx].paths.pop(0)
-        # self.ensembles[idx].paths.append(self.ensembles[idx].paths[-1])
-        # # If the trial path is not accepted (which should not happen, unless
-        # # FTX or BTX occurs), we are screwed.
-        # if status != "ACC":
-        #     logger.warning("Forced extension move failed somehow...")
-        # # If we use the pe2 file, we need to write the paths to it. 
-        # if self.save_pe2:
-        #     self.ensembles[newidx].write_to_pe2(gen="fn")
-        #     self.ensembles[idx].write_to_pe2(gen="fo")
-        # # Let's plot the level 0 and level 1 paths of both ensembles before and 
-        # # after this move has been finished. 
-        # # fig, ax = plt.subplots()
-        # # l0paths = [self.ensembles[idx].paths[0], self.ensembles[newidx].paths[0]]
-        # # l1paths = [self.ensembles[idx].paths[1], self.ensembles[newidx].paths[1]]
-        # # l2paths = [self.ensembles[idx].paths[2], self.ensembles[newidx].paths[2]]
-        # # plot_paths(l0paths, ax=ax, start_ids=[0,0], color="r")
-        # # plot_paths(l1paths, ax=ax, start_ids=[1000,1000], color="g")
-        # # plot_paths(l2paths, ax=ax, start_ids=[2000,2000], color="b")
-        # # ax.set_title("After the forced extension...")
-        # # fig.show()
-        # # Let's do it again, but plot make two subplots, one for idx and one for head
-        # # fig, (ax1, ax2) = plt.subplots(1,2)
-        # # idxpaths = [self.ensembles[idx].paths[0], self.ensembles[idx].paths[1],
-        # #             self.ensembles[idx].paths[2]]
-        # # headpaths = [self.ensembles[newidx].paths[0],
-        # #              self.ensembles[newidx].paths[1],
-        # #              self.ensembles[newidx].paths[2]]
-        # # plot_paths(idxpaths, ax=ax1, start_ids="staggered")
-        # # plot_paths(headpaths, ax=ax2, start_ids="staggered")
-        # # ax1.set_title("{}: After the forced extension...".format(
-        # #     self.ensembles[idx].name))
-        # # ax2.set_title("{}: After the forced extension...".format(
-        # #     self.ensembles[newidx].name))
-        # # fig.show()
 
     def do_null_move(self, i, gen="00"):
         """ Perform a null move in ensemble i.
@@ -325,8 +183,8 @@ class Simulation:
         ens_set["friction"] = self.settings["friction"]
         ens_set["dt"] = self.settings["dt"]
         ens_set["prime_both_starts"] = self.prime_both_starts
-        ens_set["save_pe2"] = self.save_pe2
-        ens_set["pe2_N"] = self.settings["pe2_N"]
+        # ens_set["save_pe2"] = self.save_pe2
+        # ens_set["pe2_N"] = self.settings["pe2_N"]
         ens_set["max_paths"] = self.settings["max_paths"]
 
         if self.permeability:
@@ -424,28 +282,6 @@ class Simulation:
             else:
                 self.do_swap_moves()
 
-    def run_snake(self):
-        p_shoot = self.p_shoot
-        while self.cycle < self.max_cycles:
-            logger.info("-" * 80)
-            logger.info("Cycle {}".format(self.cycle))
-            logger.info("-" * 80)
-            if np.random.rand() < p_shoot:
-                self.do_shooting_moves()
-            else:
-                self.do_snake_move()
-
-    def run_force(self):
-        p_shoot = self.p_shoot
-        while self.cycle < self.max_cycles:
-            logger.info("-" * 80)
-            logger.info("Cycle {}".format(self.cycle))
-            logger.info("-" * 80)
-            if np.random.rand() < p_shoot:
-                self.do_shooting_moves()
-            else:
-                self.do_forced_extension_move()
-
     @classmethod
     def load_simulation(cls, filename):
         """Load a simulation object from a pickle file.
@@ -457,3 +293,174 @@ class Simulation:
         """
         with open(filename, "rb") as f:
             return pkl.load(f)
+
+    ############################################################
+    # Old functions that allowed a snake to use its memory of prior MCMC paths.
+    # Detailed balance, however, forces a memoryless existence onto any snake 
+    # that desires to live. No worry buddy, I will remember you for you.
+    ############################################################
+    def do_snake_move(self, tail_id=None):
+        """Spawns a snake in a random ensemble.
+        
+        """
+        self.cycle += 1
+        logger.info("Cycle {}: Performing a snake move.".format(self.cycle))
+        snake_skeleton, snake_paths, visits =\
+            snake_move(self.ensembles, Lmax=self.snake_Lmax,
+                       simcycle=self.cycle,
+                       tail_id=tail_id)
+        # Calculate the amount of ensemble visits and how many unique ensembles 
+        # were visited
+        tot_visits = np.sum(visits)
+        unique_visits = np.sum(visits > 0)
+        logger.info("Snake made {} visits to {} unique ensembles.".format(
+            tot_visits, unique_visits))
+        # Updating the data happens within snake_move itself
+
+    def do_multi_level_shooting_moves(self):
+        """Perform shooting moves in all the ensembles, where the level at 
+        which we shoot is chosen between 0 or 1.
+        
+        """
+        self.cycle += 1
+        for ens in self.ensembles:
+            level = np.random.choice([0,1])
+            status, trial = shooting_move(ens, level=level)
+            logger.info("Shooting move in {} at level {} resulted in {}".format(
+                ens.name, level, status))
+            ens.update_data(status, trial, "sh", self.cycle, update_paths=False)
+            # update the ensemble paths list. (If the trial path is accepted!!)
+            #
+            # If we shot from level 0, then the trial path is the new level 1 
+            # path. The original level 1 path is now the level 0 path. The 
+            # original level 0 path becomes the level 3 path. For the other
+            # paths, level N becomes level N+1. 
+            # We can accomplish this quickly by just inserting the trial path
+            # # at position 1, and then flipping level 0 with level 2. 
+            # if level == 0 and status == "ACC":
+            #     ens.paths.insert(1, trial)
+            #     ens.paths[0], ens.paths[2] = ens.paths[2], ens.paths[0]
+            #     if len(ens.paths) > ens.max_paths:
+            #         ens.paths.pop()
+            # # If we shot from level 1, then the trial path is the new level 0
+            # # path. All other paths are just shifted one level up.
+            # # We can accomplish this quickly by just inserting the trial path
+            # # at position 0. 
+            # if level == 1 and status == "ACC":
+            #     ens.paths.insert(0, trial)
+            #     if len(ens.paths) > ens.max_paths:
+            #         ens.paths.pop()
+            # The above didn't work, so we'll make it easier: 
+            # If we shot from level 0, then trial = new level 1, and old level 1
+            # is now level 0. We first make two empty spots in the paths list, 
+            # and fill them up. 
+            if level == 0 and status == "ACC":
+                ens.paths.insert(0, trial)
+                ens.paths.insert(0, ens.paths[2])  # this was the old level 1
+            if level == 1 and status == "ACC":
+                ens.paths.insert(0, ens.paths[0])  # this was old level 0
+                ens.paths.insert(0, trial)
+            if status != 'ACC':
+                ens.paths.insert(0, ens.paths[1])  # This was old level 1
+                ens.paths.insert(0, ens.paths[1])  # This was old level 0
+            if len(ens.paths) > ens.max_paths:
+                while len(ens.paths) > ens.max_paths:
+                    ens.paths.pop()
+            
+            # We need to update the pe2 file
+            # if self.save_pe2:
+            #     ens.write_to_pe2(gen="sh")
+
+    def run_snake(self):
+        p_shoot = self.p_shoot
+        while self.cycle < self.max_cycles:
+            logger.info("-" * 80)
+            logger.info("Cycle {}".format(self.cycle))
+            logger.info("-" * 80)
+            if np.random.rand() < p_shoot:
+                self.do_shooting_moves()
+            else:
+                self.do_snake_move()
+
+    def do_forced_extension_move(self, idx=None):
+        self.cycle += 1
+        # choose a random ensemble to start from 
+        if idx is None:
+            idx = np.random.choice(self.ensembles).id
+        logger.info("Forced extension move in {} ({})".format(
+            self.ensembles[idx].name, idx))
+        status, trial, newidx = forced_extension(self.ensembles, idx)
+        logger.info("Forced ext from {} ({}) to {} ({}) resulted in {}".format(
+            self.ensembles[idx].name, idx,
+            self.ensembles[newidx].name, newidx,
+            status))
+        # Update the data. 
+        # Sadly, we will waste some computational time to enforce detailed
+        # balance. The ensemble which we extend from will remove its last path
+        # and also the path_data for that path. The ensemble which we extend to
+        # gains the newly generated path, whose path_data is added to the 
+        # pathensemble.txt file. 
+        self.ensembles[newidx].update_data(status, trial, 'fn', self.cycle)
+        #self.ensembles[newidx].paths.insert(0, trial)
+        self.ensembles[idx].jump_back(n=1)
+        # That's it..
+        
+        # ## OLD UPDATE CODE ##
+        # # update the data
+        # # new ensemble gets the trial to pathensemble.txt, while the old 
+        # # ensemble gets its second_last path to pathensemble.txt. We update the
+        # # ensemble paths list for the new ensemble using update_data (as this 
+        # # also manages the max length of the paths list)
+        # self.ensembles[newidx].update_data(status, trial, 'fn', self.cycle)
+        # self.ensembles[idx].update_data(status, self.ensembles[idx].paths[1],
+        #                                 'fo', self.cycle, update_paths=False)
+        # # manage the ensemble path list of the old ensemble
+        # # for the old ensemble, we pop the first path, and as a safety measure
+        # # we insert the lowest level path again (such that we never run out of
+        # # paths) TODO: this may lead to biases in extreme cases?
+        # self.ensembles[idx].paths.pop(0)
+        # self.ensembles[idx].paths.append(self.ensembles[idx].paths[-1])
+        # # If the trial path is not accepted (which should not happen, unless
+        # # FTX or BTX occurs), we are screwed.
+        # if status != "ACC":
+        #     logger.warning("Forced extension move failed somehow...")
+        # # If we use the pe2 file, we need to write the paths to it. 
+        # if self.save_pe2:
+        #     self.ensembles[newidx].write_to_pe2(gen="fn")
+        #     self.ensembles[idx].write_to_pe2(gen="fo")
+        # # Let's plot the level 0 and level 1 paths of both ensembles before and 
+        # # after this move has been finished. 
+        # # fig, ax = plt.subplots()
+        # # l0paths = [self.ensembles[idx].paths[0], self.ensembles[newidx].paths[0]]
+        # # l1paths = [self.ensembles[idx].paths[1], self.ensembles[newidx].paths[1]]
+        # # l2paths = [self.ensembles[idx].paths[2], self.ensembles[newidx].paths[2]]
+        # # plot_paths(l0paths, ax=ax, start_ids=[0,0], color="r")
+        # # plot_paths(l1paths, ax=ax, start_ids=[1000,1000], color="g")
+        # # plot_paths(l2paths, ax=ax, start_ids=[2000,2000], color="b")
+        # # ax.set_title("After the forced extension...")
+        # # fig.show()
+        # # Let's do it again, but plot make two subplots, one for idx and one for head
+        # # fig, (ax1, ax2) = plt.subplots(1,2)
+        # # idxpaths = [self.ensembles[idx].paths[0], self.ensembles[idx].paths[1],
+        # #             self.ensembles[idx].paths[2]]
+        # # headpaths = [self.ensembles[newidx].paths[0],
+        # #              self.ensembles[newidx].paths[1],
+        # #              self.ensembles[newidx].paths[2]]
+        # # plot_paths(idxpaths, ax=ax1, start_ids="staggered")
+        # # plot_paths(headpaths, ax=ax2, start_ids="staggered")
+        # # ax1.set_title("{}: After the forced extension...".format(
+        # #     self.ensembles[idx].name))
+        # # ax2.set_title("{}: After the forced extension...".format(
+        # #     self.ensembles[newidx].name))
+        # # fig.show()
+
+    def run_force(self):
+        p_shoot = self.p_shoot
+        while self.cycle < self.max_cycles:
+            logger.info("-" * 80)
+            logger.info("Cycle {}".format(self.cycle))
+            logger.info("-" * 80)
+            if np.random.rand() < p_shoot:
+                self.do_shooting_moves()
+            else:
+                self.do_forced_extension_move()

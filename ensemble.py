@@ -101,10 +101,10 @@ class Ensemble:
         self.cycle_md = 0
         self.simtype = settings["simtype"]
         self.prime_both_starts = settings.get("prime_both_starts", False)
-        self.save_pe2 = settings.get("save_pe2", False)
-        self.pe2_len = settings.get("pe2_len", 0)
-        self.pe2_N = settings.get("pe2_N", self.max_paths)
-        assert self.pe2_N <= self.max_paths, "pe2_N must be <= max_paths"
+        #self.save_pe2 = settings.get("save_pe2", False)
+        #self.pe2_len = settings.get("pe2_len", 0)
+        #self.pe2_N = settings.get("pe2_N", self.max_paths)
+        #assert self.pe2_N <= self.max_paths, "pe2_N must be <= max_paths"
 
         # Set the start, end and cross conditions of the ensemble
         self.set_conditions()
@@ -204,35 +204,35 @@ class Ensemble:
         self.cycle -= n
         # We do not update the acc_cycle, md_cycle etc
 
-    def write_to_pe2(self, N=None, gen="00"):
-        """This is the same as write_to_pe_file, but we write information for 
-        the last N paths instead of just the last path. As these paths are all
-        accepted, we will just recalculate the ordermin, ordermax, ptype and 
-        plen for each path, and write those out. 
-        This is of course very sloppy, as we're calculating stuff we should 
-        already have access to, and even more, we are losing the generation 
-        information of the path. But we're just testing here. 
+    # def write_to_pe2(self, N=None, gen="00"):
+    #     """This is the same as write_to_pe_file, but we write information for 
+    #     the last N paths instead of just the last path. As these paths are all
+    #     accepted, we will just recalculate the ordermin, ordermax, ptype and 
+    #     plen for each path, and write those out. 
+    #     This is of course very sloppy, as we're calculating stuff we should 
+    #     already have access to, and even more, we are losing the generation 
+    #     information of the path. But we're just testing here. 
 
-        Parameters
-        ----------
-        N : int
-            Number of last paths to write to the file. If none, the ensemble's 
-            default value of pe2_N is used.
+    #     Parameters
+    #     ----------
+    #     N : int
+    #         Number of last paths to write to the file. If none, the ensemble's 
+    #         default value of pe2_N is used.
 
-        """
-        if N is None:
-            N = self.pe2_N
-        with open(str(self.id) + "/pathensemble2.txt", "a") as f:
-            for path in self.paths[:N]:
-                ptype = self.get_ptype(path)
-                plen = len(path.phasepoints)
-                ordermin = min([op[0] for op in path.orders])
-                ordermax = max([op[0] for op in path.orders])
-                f.write(PATH_FMT.format(
-                    self.pe2_len, self.pe2_len, self.pe2_len, ptype[0],
-                    ptype[1], ptype[2], plen, "ACC", gen, ordermin, ordermax,
-                    0, 0, 0., 0, 0, 1.) + "\n")
-                self.pe2_len += 1
+    #     """
+    #     if N is None:
+    #         N = self.pe2_N
+    #     with open(str(self.id) + "/pathensemble2.txt", "a") as f:
+    #         for path in self.paths[:N]:
+    #             ptype = self.get_ptype(path)
+    #             plen = len(path.phasepoints)
+    #             ordermin = min([op[0] for op in path.orders])
+    #             ordermax = max([op[0] for op in path.orders])
+    #             f.write(PATH_FMT.format(
+    #                 self.pe2_len, self.pe2_len, self.pe2_len, ptype[0],
+    #                 ptype[1], ptype[2], plen, "ACC", gen, ordermin, ordermax,
+    #                 0, 0, 0., 0, 0, 1.) + "\n")
+    #             self.pe2_len += 1
 
     def write_to_pe_file(self, simcycle, cycle_acc, cycle_md, ptype, plen,
                          status, gen, ordermin, ordermax):
@@ -584,12 +584,12 @@ class Ensemble:
         phasepoints = phasepoints1 + phasepoints2[1:]
         orders = orders1 + orders2[1:]
         path = Path(phasepoints, orders, self.id)
-        if self.save_pe2:  # Such that we have enough to write to pe2
-            for i in range(self.pe2_N):
-                self.paths.append(path)
-            self.write_to_pe2(gen="ld")
-        else:
-            self.paths.append(path)
+        # if self.save_pe2:  # Such that we have enough to write to pe2
+        #     for i in range(self.pe2_N):
+        #         self.paths.append(path)
+        #     self.write_to_pe2(gen="ld")
+        # else:
+        self.paths.append(path)
         self.last_path = path
         self.update_data("ACC", path, "ld", 0)
 

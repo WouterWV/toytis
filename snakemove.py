@@ -9,6 +9,12 @@ import matplotlib.pyplot as plt
 from moves import cut_LR_to_M, cut_extremal_phasepoints, propagate,\
     cut_overlap_phasepoints
 
+#####################
+# Old functions that allowed a snake to use its memory of prior MCMC paths.
+# Detailed balance, however, forces a memoryless existence onto any snake 
+# that desires to live. No worry buddy, I will remember you for you.
+#####################
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
